@@ -1,6 +1,5 @@
                         YouTube Playlist to GitHub .m3u File Uploader 
 
-YouTube Playlist to GitHub .m3u File Uploader
 
                                              Overview
                                              
