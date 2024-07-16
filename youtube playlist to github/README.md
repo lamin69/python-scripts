@@ -1,8 +1,8 @@
-                                          YouTube Playlist to GitHub .m3u File Uploader 
+                      YouTube Playlist to GitHub .m3u File Uploader 
 
 
-                                             Overview
-                                             
+                                 Overview
+
 This Python script automates the process of fetching a public YouTube playlist, converting it to an .m3u file, and uploading it to a GitHub repository. It's perfect for maintaining an up-to-date list of your favorite YouTube playlists in a format compatible with many media players.
 Features
 Fetches video titles and URLs from a public YouTube playlist
@@ -17,7 +17,11 @@ GitHub account and personal access token
 Required Python packages (installed via requirements.txt):
 pytube
 PyGithub
+                                             
+                                             
+
 ==========================================================
+
 Installation
 Clone the repository:
 
@@ -30,12 +34,12 @@ python -m venv venv
 source venv/bin/activate  
 
 # On Windows, use : 
+ 
  `venv\Scripts\activate`
 
 Install the required packages:
 pip install -r requirements.txt  
-# the requirements to make the script works are in the file : requirements.txt
-
+.# the requirements to make the script works are in the file : requirements.txt    
 Make the script executable 
 chmod +x youtube_to_github.py
 
