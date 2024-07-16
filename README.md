@@ -1,4 +1,4 @@
-                        YouTube Playlist to GitHub .m3u File Uploader 
+                                          YouTube Playlist to GitHub .m3u File Uploader 
 
 
                                              Overview
@@ -20,6 +20,7 @@ PyGithub
 ==========================================================
 Installation
 Clone the repository:
+
 git clone https://github.com/lamin69/python-scripts.git
 
 cd /lamin69/python-scripts
@@ -28,7 +29,8 @@ cd /lamin69/python-scripts
 python -m venv venv
 source venv/bin/activate  
 
-# On Windows, use :  `venv\Scripts\activate`
+# On Windows, use : 
+ `venv\Scripts\activate`
 
 Install the required packages:
 pip install -r requirements.txt  
