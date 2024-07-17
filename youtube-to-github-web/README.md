@@ -1,4 +1,5 @@
 # YouTube Playlist to GitHub M3U Converter
+![YouTube to GitHub Web Interface](web_interface.png)
 
 This project provides a web application that automates the process of converting YouTube playlists into M3U files and uploading them directly to a specified GitHub repository. It offers a user-friendly web interface for easy interaction and management, packaged as a Docker container for simple deployment.
 
@@ -114,7 +115,7 @@ MIT
 
 ## Author
 
-69lamin
+lamin69
 
 ## Acknowledgments
 
