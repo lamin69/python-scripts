@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube to GitHub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1 id="flashingTitle">YouTube Playlist to GitHub</h1>
+        <form id="playlistForm">
+            <div>
+                <label for="playlist_url">YouTube Playlist URL:</label>
+                <input type="text" id="playlist_url" name="playlist_url" required>
+            </div>
+            
+            <div>
+                <label for="github_username">GitHub Username:</label>
+                <input type="text" id="github_username" name="github_username" required>
+            </div>
+            
+            <div>
+                <label for="github_repo">GitHub Repository:</label>
+                <input type="text" id="github_repo" name="github_repo" required>
+            </div>
+            
+            <div>
+                <label for="github_token">GitHub Token:</label>
+                <input type="password" id="github_token" name="github_token" required>
+            </div>
+            
+            <button type="submit" class="button-3d">Submit</button>
+        </form>
+        <div id="result"></div>
+    </div>
+    <button id="darkModeToggle">Toggle Dark Mode</button>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
