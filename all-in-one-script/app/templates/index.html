@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All-in-One Script Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>All-in-One Script Interface</h1>
+    
+    <select id="scriptSelector" onchange="updateFields()">
+        <option value="youtube-to-github">YouTube to GitHub</option>
+        <option value="channel-scrapper">Channel Scrapper M3U</option>
+    </select>
+
+    <div id="youtubeToGithubFields">
+        <input type="text" id="playlistUrl" placeholder="YouTube Playlist URL">
+        <input type="text" id="githubUsername" placeholder="GitHub Username">
+        <input type="text" id="githubRepo" placeholder="GitHub Repository">
+        <input type="password" id="githubToken" placeholder="GitHub Token">
+    </div>
+
+    <div id="channelScrapperFields" style="display:none;">
+        <textarea id="websiteUrls" placeholder="Enter website URLs (one per line)"></textarea>
+        <input type="text" id="scrapperGithubUsername" placeholder="GitHub Username">
+        <input type="text" id="scrapperGithubRepo" placeholder="GitHub Repository">
+        <input type="password" id="scrapperGithubToken" placeholder="GitHub Token">
+    </div>
+
+    <button onclick="runScript()">Run Script</button>
+
+    <div id="progressBar" style="display:none;">
+        <progress id="progress" value="0" max="100"></progress>
+        <p id="statusMessage"></p>
+    </div>
+
+    <div id="resultArea" style="display:none;">
+        <h2>Result</h2>
+        <pre id="resultContent"></pre>
+        <button onclick="downloadResult()">Download M3U File</button>
+        <button onclick="uploadToGithub()">Upload to GitHub</button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
