@@ -1,1 +1,602 @@
 
+File: /home/lamine/all-in-one-script/Dockerfile
+Content:
+FROM python:3.8-slim-buster
+
+WORKDIR /app
+
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+
+COPY app /app
+
+CMD ["python", "app.py"]
+\n\n
+File: /home/lamine/all-in-one-script/project_contents.txt
+Content:
+File: /home/lamine/all-in-one-script/docker-compose.yml
+Content:
+version: '3'
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./app:/app
+    environment:
+      - FLASK_ENV=development
+\n\n
+File: /home/lamine/all-in-one-script/file-tree-upload-github.py
+Content:
+#!/usr/bin/env python3
+
+import os
+import requests
+import base64
+from datetime import datetime
+
+def run_tree_command():
+    with open('website-files-tree.txt', 'w') as output_file:
+        for root, dirs, files in os.walk('/home/lamine/all-in-one-script'):
+            for file in files:
+                if file.endswith(('.css', '.js', '.php', '.html')):
+                    file_path = os.path.join(root, file)
+                    output_file.write(f"\n## {file_path}\n\n")
+                    with open(file_path, 'r') as content_file:
+                        output_file.write(content_file.read())
+                    output_file.write('\n')
+
+def get_latest_version(repo_name, github_token, github_username, date_str):
+    url = f"https://api.github.com/repos/{github_username}/{repo_name}/contents"
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        files = response.json()
+        versions = [int(f['name'].split('v')[-1].split('.')[0]) for f in files if f['name'].startswith(f"website-files-tree==={date_str}.version v") and f['name'].endswith('.txt')]
+        return max(versions) if versions else 0
+    return 0
+
+def upload_to_github(repo_name, github_token, github_username):
+    date_str = datetime.now().strftime("%d-%m-%Y")
+    latest_version = get_latest_version(repo_name, github_token, github_username, date_str)
+    new_version = latest_version + 1
+    new_filename = f"website-files-tree==={date_str}.version v{new_version}.txt"
+
+    with open('website-files-tree.txt', 'r') as file:
+        content = file.read()
+
+    url = f"https://api.github.com/repos/{github_username}/{repo_name}/contents/{new_filename}"
+    headers = {
+        "Authorization": f"token {github_token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+
+    data = {
+        "message": f"Add {new_filename}",
+        "content": base64.b64encode(content.encode()).decode()
+    }
+    response = requests.put(url, headers=headers, json=data)
+
+    if response.status_code in [200, 201]:
+        print(f"{new_filename} created successfully")
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+
+if __name__ == "__main__":
+    run_tree_command()
+    
+    github_username = "lamin69"
+    github_token = "******************"
+    repo_name = "php-website"
+    
+    upload_to_github(repo_name, github_token, github_username)
+
+\n\n
+File: /home/lamine/all-in-one-script/requirements.txt
+Content:
+Flask==2.0.1
+Werkzeug==2.0.1
+requests==2.26.0
+beautifulsoup4==4.10.0
+pytube==11.0.1
+PyGithub==1.55
+httpx==0.23.0
+
+\n\n
+File: /home/lamine/all-in-one-script/app/app.py
+Content:
+from flask import Flask, render_template, request, jsonify
+from script_handler import run_youtube_to_github_handler, run_channel_scrapper_handler, upload_to_github_handler
+import logging
+
+app = Flask(__name__)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+current_progress = 0
+status_message = ""
+result_content = ""
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/run_script', methods=['POST'])
+def run_script():
+    global current_progress, status_message, result_content
+    data = request.json
+    script_type = data['script_type']
+    
+    def progress_callback(progress, message):
+        global current_progress, status_message
+        current_progress = progress
+        status_message = message
+        logging.info(f"Progress: {progress}%, Message: {message}")
+    
+    data['progress_callback'] = progress_callback
+    
+    try:
+        if script_type == 'youtube-to-github':
+            result = run_youtube_to_github_handler(data)
+        elif script_type == 'channel-scrapper':
+            result = run_channel_scrapper_handler(data)
+            result_content = result.get('content', '')
+        else:
+            return jsonify({'error': 'Invalid script type'}), 400
+        
+        result['content'] = result_content
+        return jsonify(result)
+    except Exception as e:
+        logging.error(f"Error running script: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/upload_to_github', methods=['POST'])
+def upload_to_github():
+    data = request.json
+    try:
+        result = upload_to_github_handler(data)
+        return jsonify(result)
+    except Exception as e:
+        logging.error(f"Error uploading to GitHub: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/progress')
+def progress():
+    global current_progress, status_message
+    return jsonify({'progress': current_progress, 'message': status_message})
+
+@app.after_request
+def add_header(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0')
+\n\n
+File: /home/lamine/all-in-one-script/app/static/css/style.css
+Content:
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+}
+
+h1 {
+    color: #333;
+}
+
+input[type="text"], input[type="password"], select, textarea {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#progressBar {
+    margin-top: 20px;
+}
+
+progress {
+    width: 100%;
+}
+
+#statusMessage {
+    margin-top: 10px;
+    font-style: italic;
+}
+\n\n
+File: /home/lamine/all-in-one-script/app/static/js/script.js
+Content:
+function updateFields() {
+    var selector = document.getElementById("scriptSelector").value;
+    document.getElementById("youtubeToGithubFields").style.display = selector === "youtube-to-github" ? "block" : "none";
+    document.getElementById("channelScrapperFields").style.display = selector === "channel-scrapper" ? "block" : "none";
+}
+
+function runScript() {
+    var scriptType = document.getElementById("scriptSelector").value;
+    var data = {
+        script_type: scriptType
+    };
+
+    if (scriptType === "youtube-to-github") {
+        data.playlist_url = document.getElementById("playlistUrl").value;
+        data.github_username = document.getElementById("githubUsername").value;
+        data.github_repo = document.getElementById("githubRepo").value;
+        data.github_token = document.getElementById("githubToken").value;
+    } else if (scriptType === "channel-scrapper") {
+        data.website_urls = document.getElementById("websiteUrls").value;
+        data.github_username = document.getElementById("scrapperGithubUsername").value;
+        data.github_repo = document.getElementById("scrapperGithubRepo").value;
+        data.github_token = document.getElementById("scrapperGithubToken").value;
+    }
+
+    document.getElementById("progressBar").style.display = "block";
+    document.getElementById("resultArea").style.display = "none";
+
+    fetch('/run_script', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Success:', data);
+        updateProgress(data.progress, data.message);
+        if (data.content) {
+            document.getElementById("resultContent").textContent = data.content;
+            document.getElementById("resultArea").style.display = "block";
+        }
+    })
+    .catch((error) => {
+        console.error('Error:', error);
+    });
+}
+
+function updateProgress(progress, message) {
+    document.getElementById("progress").value = progress;
+    document.getElementById("statusMessage").innerText = message;
+}
+
+function downloadResult() {
+    var content = document.getElementById("resultContent").textContent;
+    var blob = new Blob([content], { type: 'text/plain' });
+    var url = window.URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'channels.m3u';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function uploadToGithub() {
+    var scriptType = document.getElementById("scriptSelector").value;
+    var data = {
+        script_type: scriptType + "_upload",
+        content: document.getElementById("resultContent").textContent,
+        github_username: document.getElementById(scriptType === "youtube-to-github" ? "githubUsername" : "scrapperGithubUsername").value,
+        github_repo: document.getElementById(scriptType === "youtube-to-github" ? "githubRepo" : "scrapperGithubRepo").value,
+        github_token: document.getElementById(scriptType === "youtube-to-github" ? "githubToken" : "scrapperGithubToken").value
+    };
+
+    fetch('/upload_to_github', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Upload Success:', data);
+        alert(data.message);
+    })
+    .catch((error) => {
+        console.error('Upload Error:', error);
+        alert('Error uploading to GitHub');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updateFields();
+});
+\n\n
+File: /home/lamine/all-in-one-script/app/youtube_to_github.py
+Content:
+import re
+import logging
+from github import Github
+from github import GithubException
+from pytube import Playlist, exceptions
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+def run_youtube_to_github_script(playlist_url, github_username, github_repo, github_token, progress_callback):
+    try:
+        progress_callback(0, "Initializing...")
+        playlist = Playlist(playlist_url)
+        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+
+        progress_callback(10, "Fetching playlist videos...")
+        videos = []
+        for i, video in enumerate(playlist.videos):
+            try:
+                videos.append((video.title, video.watch_url))
+                progress = 10 + int((i + 1) / len(playlist.videos) * 40)
+                progress_callback(progress, f"Processed {i + 1}/{len(playlist.videos)} videos")
+            except Exception as e:
+                logging.error(f"Error processing video in playlist: {e}")
+
+        progress_callback(50, "Sorting videos...")
+        videos.sort(key=lambda x: x[0])
+
+        progress_callback(60, "Creating m3u content...")
+        m3u_content = "#EXTM3U\n"
+        for title, url in videos:
+            m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
+
+        playlist_name = playlist.title 
+        file_name = f"{playlist_name}.m3u"
+        
+        progress_callback(70, "Connecting to GitHub...")
+        g = Github(github_token)
+        repo = g.get_user(github_username).get_repo(github_repo) 
+        
+        try:
+            progress_callback(80, "Checking if file exists on GitHub...")
+            contents = repo.get_contents(file_name)
+            progress_callback(90, "Updating existing file on GitHub...")
+            repo.update_file(contents.path, f"Update playlist: {playlist_name}", m3u_content, contents.sha)
+            return {"progress": 100, "message": f"Playlist '{playlist_name}' updated on GitHub."}
+        except GithubException as e:
+            if e.status == 404:
+                progress_callback(90, "Creating new file on GitHub...")
+                repo.create_file(file_name, f"Add playlist: {playlist_name}", m3u_content)
+                return {"progress": 100, "message": f"Playlist '{playlist_name}' created on GitHub."}
+            else:
+                return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
+
+    except exceptions.RegexMatchError:
+        return {"progress": 100, "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
+    except KeyError:
+        return {"progress": 100, "message": f"Error extracting video information from the playlist: {playlist_url}"}
+    except Exception as e:
+        return {"progress": 100, "message": f"An unexpected error occurred: {str(e)}"}
+\n\n
+File: /home/lamine/all-in-one-script/app/channel_scrapper.py
+Content:
+import asyncio
+import httpx
+import re
+from bs4 import BeautifulSoup
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+async def fetch_content(url, progress_callback):
+    progress_callback(0, f"Fetching content from {url}")
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=30.0)
+            progress_callback(10, f"Content fetched from {url}")
+            return response.text
+        except Exception as e:
+            logger.error(f"Error fetching {url}: {str(e)}")
+            progress_callback(10, f"Error fetching {url}: {str(e)}")
+            return ""
+
+async def verify_stream(url):
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.head(url, timeout=5.0)
+            return response.status_code == 200
+        except:
+            return False
+
+def extract_channel_name(info):
+    patterns = [
+        r'tvg-name="([^"]*)"',
+        r'group-title="([^"]*)"',
+        r',(.+)$'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, info)
+        if match and match.group(1):
+            return match.group(1).strip()
+    return "Unknown Channel"
+
+async def process_m3u(content, progress_callback):
+    progress_callback(20, "Processing as M3U file")
+    matches = re.findall(r'(#EXTINF:-1[^\n]*)\n(https?://[^\s]+)', content)
+    all_streams = {url: (extract_channel_name(info), info) for info, url in matches}
+    progress_callback(30, f"Found {len(all_streams)} potential streams in M3U format")
+    return all_streams
+
+async def process_html(content, progress_callback):
+    progress_callback(20, "Processing as HTML")
+    soup = BeautifulSoup(content, 'html.parser')
+    all_streams = {}
+    for a in soup.find_all('a', href=True):
+        if a['href'].endswith(('.m3u8', '.m3u')):
+            all_streams[a['href']] = (a.text.strip() or "Unknown Channel", f"#EXTINF:-1,{a.text.strip()}")
+    progress_callback(30, f"Found {len(all_streams)} potential streams in HTML format")
+    return all_streams
+
+async def process_raw_links(content, progress_callback):
+    progress_callback(20, "Processing as raw text for links")
+    matches = re.findall(r'(https?://[^\s]+\.(?:m3u8|m3u))', content)
+    all_streams = {url: ("Unknown Channel", f"#EXTINF:-1,Unknown Channel") for url in matches}
+    progress_callback(30, f"Found {len(all_streams)} potential streams as raw links")
+    return all_streams
+
+async def process_playlist(url, progress_callback):
+    content = await fetch_content(url, progress_callback)
+    if not content:
+        return []
+
+    processing_methods = [
+        process_m3u,
+        process_html,
+        process_raw_links
+    ]
+
+    all_streams = {}
+    for method in processing_methods:
+        all_streams = await method(content, progress_callback)
+        if all_streams:
+            break
+
+    verified_streams = []
+    total = len(all_streams)
+    
+    progress_callback(40, f"Verifying {total} potential streams")
+    for i, (url, (name, info)) in enumerate(all_streams.items()):
+        if await verify_stream(url):
+            verified_streams.append((name, url, info))
+        progress = 40 + int((i + 1) / total * 50)
+        progress_callback(progress, f"Verified {i + 1}/{total} streams")
+    
+    progress_callback(90, f"Found {len(verified_streams)} valid streams from {url}")
+    return verified_streams
+
+async def run_channel_scrapper_script_async(website_urls, progress_callback):
+    all_verified_streams = []
+    total_urls = len(website_urls)
+    
+    for i, url in enumerate(website_urls):
+        progress_callback(0, f"Processing website {i + 1}/{total_urls}: {url}")
+        verified_streams = await process_playlist(url, progress_callback)
+        all_verified_streams.extend(verified_streams)
+        overall_progress = int((i + 1) / total_urls * 100)
+        progress_callback(overall_progress, f"Processed {i + 1}/{total_urls} websites")
+    
+    m3u_content = "#EXTM3U\n"
+    for name, url, info in all_verified_streams:
+        m3u_content += f"{info}\n{url}\n"
+    
+    return {'progress': 100, 'message': f'Channels successfully scraped with {len(all_verified_streams)} verified streams', 'content': m3u_content}
+
+def run_channel_scrapper_script(website_urls, progress_callback):
+    return asyncio.run(run_channel_scrapper_script_async(website_urls, progress_callback))
+\n\n
+File: /home/lamine/all-in-one-script/app/templates/index.html
+Content:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All-in-One Script Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <h1>All-in-One Script Interface</h1>
+    
+    <select id="scriptSelector" onchange="updateFields()">
+        <option value="youtube-to-github">YouTube to GitHub</option>
+        <option value="channel-scrapper">Channel Scrapper M3U</option>
+    </select>
+
+    <div id="youtubeToGithubFields">
+        <input type="text" id="playlistUrl" placeholder="YouTube Playlist URL">
+        <input type="text" id="githubUsername" placeholder="GitHub Username">
+        <input type="text" id="githubRepo" placeholder="GitHub Repository">
+        <input type="password" id="githubToken" placeholder="GitHub Token">
+    </div>
+
+    <div id="channelScrapperFields" style="display:none;">
+        <textarea id="websiteUrls" placeholder="Enter website URLs (one per line)"></textarea>
+        <input type="text" id="scrapperGithubUsername" placeholder="GitHub Username">
+        <input type="text" id="scrapperGithubRepo" placeholder="GitHub Repository">
+        <input type="password" id="scrapperGithubToken" placeholder="GitHub Token">
+    </div>
+
+    <button onclick="runScript()">Run Script</button>
+
+    <div id="progressBar" style="display:none;">
+        <progress id="progress" value="0" max="100"></progress>
+        <p id="statusMessage"></p>
+    </div>
+
+    <div id="resultArea" style="display:none;">
+        <h2>Result</h2>
+        <pre id="resultContent"></pre>
+        <button onclick="downloadResult()">Download M3U File</button>
+        <button onclick="uploadToGithub()">Upload to GitHub</button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
+\n\n
+File: /home/lamine/all-in-one-script/app/script_handler.py
+Content:
+from youtube_to_github import run_youtube_to_github_script
+from channel_scrapper import run_channel_scrapper_script
+from github import Github
+from github import GithubException
+
+def run_youtube_to_github_handler(params):
+    return run_youtube_to_github_script(
+        params['playlist_url'],
+        params['github_username'],
+        params['github_repo'],
+        params['github_token'],
+        params['progress_callback']
+    )
+
+def run_channel_scrapper_handler(params):
+    return run_channel_scrapper_script(
+        params['website_urls'].split('\n'),
+        params['progress_callback']
+    )
+
+def upload_to_github_handler(params):
+    try:
+        g = Github(params['github_token'])
+        repo = g.get_user(params['github_username']).get_repo(params['github_repo'])
+        file_name = 'channels.m3u' if params['script_type'] == 'channel-scrapper_upload' else 'playlist.m3u'
+        
+        try:
+            contents = repo.get_contents(file_name)
+            repo.update_file(contents.path, "Update M3U file", params['content'], contents.sha)
+            return {"status": "success", "message": f"File '{file_name}' updated on GitHub."}
+        except GithubException as e:
+            if e.status == 404:
+                repo.create_file(file_name, "Add M3U file", params['content'])
+                return {"status": "success", "message": f"File '{file_name}' created on GitHub."}
+            else:
+                return {"status": "error", "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
+    except Exception as e:
+        return {"status": "error", "message": f"An unexpected error occurred: {str(e)}"}
+\n\n
+File: /home/lamine/all-in-one-script/app/__init__.py
+Content:
+\n\n
