@@ -238,55 +238,40 @@ document.addEventListener('DOMContentLoaded', function() {
 \n\n
 File: /home/lamine/all-in-one-script/app/youtube_to_github.py
 Content:
-import os
 import re
 import logging
 from github import Github
 from github import GithubException
-from pytube import Playlist, YouTube
-import requests
+from pytube import Playlist, exceptions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-def get_video_info(video_url):
-    try:
-        yt = YouTube(video_url)
-        return yt.title, yt.watch_url
-    except Exception as e:
-        logging.error(f"Error getting info for video {video_url}: {str(e)}")
-        return None, None
 
 def run_youtube_to_github_script(playlist_url, github_username, github_repo, github_token, progress_callback):
     try:
         progress_callback(0, "Initializing...")
         playlist = Playlist(playlist_url)
-        
+        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+
         progress_callback(10, "Fetching playlist videos...")
-        video_urls = list(playlist.video_urls)
-        if not video_urls:
-            return {"progress": 100, "message": "Error: No videos found in the playlist. Please check the URL."}
-        
-        logging.info(f"Found {len(video_urls)} videos in the playlist")
-        
-        progress_callback(30, "Processing videos...")
+        videos = []
+        for i, video in enumerate(playlist.videos):
+            try:
+                videos.append((video.title, video.watch_url))
+                progress = 10 + int((i + 1) / len(playlist.videos) * 40)
+                progress_callback(progress, f"Processed {i + 1}/{len(playlist.videos)} videos")
+            except Exception as e:
+                logging.error(f"Error processing video in playlist: {e}")
+
+        progress_callback(50, "Sorting videos...")
+        videos.sort(key=lambda x: x[0])
+
+        progress_callback(60, "Creating m3u content...")
         m3u_content = "#EXTM3U\n"
-        for i, video_url in enumerate(video_urls):
-            title, url = get_video_info(video_url)
-            if title and url:
-                m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
-            progress = 30 + int((i + 1) / len(video_urls) * 40)
-            progress_callback(progress, f"Processed {i + 1}/{len(video_urls)} videos")
+        for title, url in videos:
+            m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
 
-        if m3u_content == "#EXTM3U\n":
-            return {"progress": 100, "message": "Error: Failed to extract any video information from the playlist."}
-
-        playlist_name = playlist.title
-        if not playlist_name:
-            playlist_name = "Untitled_Playlist"
+        playlist_name = playlist.title 
         file_name = f"{playlist_name}.m3u"
-        
-        logging.info(f"Playlist name: {playlist_name}")
-        logging.info(f"M3U content length: {len(m3u_content)}")
         
         progress_callback(70, "Connecting to GitHub...")
         g = Github(github_token)
@@ -296,18 +281,21 @@ def run_youtube_to_github_script(playlist_url, github_username, github_repo, git
             progress_callback(80, "Checking if file exists on GitHub...")
             contents = repo.get_contents(file_name)
             progress_callback(90, "Updating existing file on GitHub...")
-            repo.update_file(contents.path, "Update playlist", m3u_content, contents.sha)
+            repo.update_file(contents.path, f"Update playlist: {playlist_name}", m3u_content, contents.sha)
             return {"progress": 100, "message": f"Playlist '{playlist_name}' updated on GitHub."}
         except GithubException as e:
             if e.status == 404:
                 progress_callback(90, "Creating new file on GitHub...")
-                repo.create_file(file_name, "Add playlist", m3u_content)
+                repo.create_file(file_name, f"Add playlist: {playlist_name}", m3u_content)
                 return {"progress": 100, "message": f"Playlist '{playlist_name}' created on GitHub."}
             else:
                 return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
 
+    except exceptions.RegexMatchError:
+        return {"progress": 100, "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
+    except KeyError:
+        return {"progress": 100, "message": f"Error extracting video information from the playlist: {playlist_url}"}
     except Exception as e:
-        logging.error(f"Unexpected error: {str(e)}")
         return {"progress": 100, "message": f"An unexpected error occurred: {str(e)}"}
 \n\n
 File: /home/lamine/all-in-one-script/app/channel_scrapper.py
@@ -315,8 +303,9 @@ Content:
 import asyncio
 import httpx
 import re
+from bs4 import BeautifulSoup
 
-async def fetch_playlist(url):
+async def fetch_content(url):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, timeout=10.0)
@@ -345,25 +334,35 @@ def extract_channel_name(info):
         return name.group(1).strip()
     return "Unknown Channel"
 
-async def process_playlist(url, progress_callback):
-    progress_callback(0, f"Fetching playlist from {url}")
-    content = await fetch_playlist(url)
+async def process_m3u(content):
     matches = re.findall(r'(#EXTINF:-1[^\n]*)\n(https?://[^\s]+\.m3u8)', content)
     all_streams = {url: (extract_channel_name(info), info) for info, url in matches}
+    return all_streams
 
+async def process_html(content):
+    soup = BeautifulSoup(content, 'html.parser')
+    all_streams = {}
+    for a in soup.find_all('a', href=True):
+        if a['href'].endswith('.m3u8'):
+            all_streams[a['href']] = (a.text.strip() or "Unknown Channel", f"#EXTINF:-1,{a.text.strip()}")
+    return all_streams
+
+async def process_playlist(url, progress_callback):
+    content = await fetch_content(url)
+    all_streams = await process_m3u(content) or await process_html(content)
+    
     verified_streams = []
     total = len(all_streams)
     
-    progress_callback(50, f"Verifying {total} streams from {url}")
     for i, (url, (name, info)) in enumerate(all_streams.items()):
         if await verify_stream(url):
             verified_streams.append((name, url, info))
-        progress = 50 + int((i + 1) / total * 50)
-        progress_callback(progress, f"Verified {i + 1}/{total} streams")
+        progress = int((i + 1) / total * 100)
+        progress_callback(progress, f"Processed {i + 1}/{total} streams from {url}")
     
     return verified_streams
 
-async def run_channel_scrapper_async(website_urls, progress_callback):
+async def run_channel_scrapper_script_async(website_urls, progress_callback):
     all_verified_streams = []
     total_urls = len(website_urls)
     
@@ -372,7 +371,7 @@ async def run_channel_scrapper_async(website_urls, progress_callback):
         all_verified_streams.extend(verified_streams)
         progress = int((i + 1) / total_urls * 100)
         progress_callback(progress, f"Processed {i + 1}/{total_urls} websites")
-
+    
     m3u_content = "#EXTM3U\n"
     for name, url, info in all_verified_streams:
         m3u_content += f"{info}\n{url}\n"
@@ -380,7 +379,7 @@ async def run_channel_scrapper_async(website_urls, progress_callback):
     return {'progress': 100, 'message': f'Channels successfully scraped with {len(all_verified_streams)} verified streams', 'content': m3u_content}
 
 def run_channel_scrapper_script(website_urls, progress_callback):
-    return asyncio.run(run_channel_scrapper_async(website_urls, progress_callback))
+    return asyncio.run(run_channel_scrapper_script_async(website_urls, progress_callback))
 \n\n
 File: /home/lamine/all-in-one-script/app/templates/index.html
 Content:
