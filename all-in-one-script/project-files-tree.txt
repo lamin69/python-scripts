@@ -3,6 +3,7 @@ Content:
 from flask import Flask, render_template, request, jsonify
 import subprocess
 import os
+import traceback
 
 app = Flask(__name__)
 
@@ -12,41 +13,43 @@ def index():
 
 @app.route('/run_script', methods=['POST'])
 def run_script():
-    script_choice = request.form['script_choice']
-    
-    if script_choice == 'youtube-to-github':
-        playlist_url = request.form['playlist_url']
-        github_username = request.form['github_username']
-        github_repo = request.form['github_repo']
-        github_token = request.form['github_token']
+    try:
+        script_choice = request.form['script_choice']
         
-        script_path = os.path.join(os.path.dirname(__file__), 'youtube-to-GitHub.py')
-        result = subprocess.run(['python', script_path, playlist_url, github_username, github_repo, github_token], capture_output=True, text=True)
-        
+        if script_choice == 'youtube-to-github':
+            playlist_url = request.form['playlist_url']
+            github_username = request.form['github_username']
+            github_repo = request.form['github_repo']
+            github_token = request.form['github_token']
+            
+            script_path = os.path.join(os.path.dirname(__file__), 'youtube-to-GitHub.py')
+            result = subprocess.run(['python', script_path, playlist_url, github_username, github_repo, github_token], capture_output=True, text=True)
+            
+        elif script_choice == 'channel-scraper':
+            websites = request.form['websites']
+            github_username = request.form['github_username']
+            github_repo = request.form['github_repo']
+            github_token = request.form['github_token']
+            
+            script_path = os.path.join(os.path.dirname(__file__), 'channel_scraper.py')
+            result = subprocess.run(['python', script_path, websites, github_username, github_repo, github_token], capture_output=True, text=True)
+            
+        else:
+            return jsonify({'success': False, 'message': 'Invalid script choice'})
+
         if result.returncode == 0:
             return jsonify({'success': True, 'message': 'Script executed successfully', 'output': result.stdout})
         else:
             return jsonify({'success': False, 'message': 'Script execution failed', 'error': result.stderr})
-    
-    elif script_choice == 'channel-scraper':
-        websites = request.form['websites']
-        github_username = request.form['github_username']
-        github_repo = request.form['github_repo']
-        github_token = request.form['github_token']
-        
-        script_path = os.path.join(os.path.dirname(__file__), 'channel_scraper.py')
-        result = subprocess.run(['python', script_path, websites, github_username, github_repo, github_token], capture_output=True, text=True)
-        
-        if result.returncode == 0:
-            return jsonify({'success': True, 'message': 'Script executed successfully', 'output': result.stdout})
-        else:
-            return jsonify({'success': False, 'message': 'Script execution failed', 'error': result.stderr})
-    
-    else:
-        return jsonify({'success': False, 'message': 'Invalid script choice'})
+
+    except Exception as e:
+        app.logger.error(f"An error occurred: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'message': 'An unexpected error occurred', 'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True)\n\n
+    app.run(host='0.0.0.0', port=5000, debug=True)
+\n\n
 File: /home/lamine/all-in-one-script/static/css/styles.css
 Content:
 :root {
@@ -240,7 +243,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["python", "app.py"]\n\n
+EXPOSE 5000
+
+CMD ["python", "-u", "app.py"]
+\n\n
 File: /home/lamine/all-in-one-script/channel_scraper.py
 Content:
 import sys
@@ -267,13 +273,15 @@ def upload_to_github(channels, github_username, github_repo, github_token):
     g = github.Github(github_token)
     repo = g.get_user(github_username).get_repo(github_repo)
     
-    content = "\n".join(channels)
+    content = "#EXTM3U\n" + "\n".join(channels)
     
     try:
         contents = repo.get_contents("channels.m3u")
         repo.update_file(contents.path, "Update channels list", content, contents.sha)
+        print("channels.m3u updated successfully.")
     except github.GithubException:
         repo.create_file("channels.m3u", "Create channels list", content)
+        print("channels.m3u created successfully.")
 
 if __name__ == "__main__":
     websites = sys.argv[1].split(',')
@@ -288,12 +296,54 @@ if __name__ == "__main__":
 \n\n
 File: /home/lamine/all-in-one-script/project_contents.txt
 Content:
+File: /home/lamine/all-in-one-script/youtube-to-GitHub.py
+Content:
+import sys
+import requests
+from bs4 import BeautifulSoup
+import github
+
+def get_playlist_videos(playlist_url):
+    response = requests.get(playlist_url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    video_links = soup.find_all('a', {'class': 'yt-simple-endpoint style-scope ytd-playlist-video-renderer'})
+    return [f"https://www.youtube.com{link['href'].split('&')[0]}" for link in video_links]
+
+def create_m3u_content(video_urls):
+    return "#EXTM3U\n" + "\n".join(video_urls)
+
+def upload_to_github(content, github_username, github_repo, github_token):
+    g = github.Github(github_token)
+    repo = g.get_user(github_username).get_repo(github_repo)
+    
+    try:
+        contents = repo.get_contents("playlist.m3u")
+        repo.update_file(contents.path, "Update playlist", content, contents.sha)
+        print("playlist.m3u updated successfully.")
+    except github.GithubException:
+        repo.create_file("playlist.m3u", "Create playlist", content)
+        print("playlist.m3u created successfully.")
+
+if __name__ == "__main__":
+    playlist_url = sys.argv[1]
+    github_username = sys.argv[2]
+    github_repo = sys.argv[3]
+    github_token = sys.argv[4]
+
+    video_urls = get_playlist_videos(playlist_url)
+    m3u_content = create_m3u_content(video_urls)
+    upload_to_github(m3u_content, github_username, github_repo, github_token)
+    
+    print(f"Successfully processed {len(video_urls)} videos and uploaded to GitHub.")
+\n\n
 File: /home/lamine/all-in-one-script/requirements.txt
 Content:
 Flask==2.0.1
+Werkzeug==2.2.2
 requests==2.26.0
 beautifulsoup4==4.10.0
-PyGithub==1.55\n\n
+PyGithub==1.55
+\n\n
 File: /home/lamine/all-in-one-script/templates/index.html
 Content:
 <!DOCTYPE html>
@@ -303,6 +353,9 @@ Content:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Script Runner</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        /* ... (keep the existing styles) ... */
+    </style>
 </head>
 <body>
     <h1>Script Runner</h1>
@@ -312,7 +365,6 @@ Content:
             <option value="youtube-to-github">YouTube to GitHub</option>
             <option value="channel-scraper">Channel Scraper</option>
         </select>
-        <br><br>
         
         <div id="youtube-to-github-fields">
             <input type="text" id="playlist_url" name="playlist_url" placeholder="YouTube Playlist URL" required>
@@ -346,6 +398,7 @@ Content:
 
             $('#scriptForm').submit(function(e) {
                 e.preventDefault();
+                $('#result').html('<p>Running script...</p>');
                 $.ajax({
                     url: '/run_script',
                     type: 'POST',
@@ -357,12 +410,13 @@ Content:
                             $('#result').html('<p>Error: ' + response.message + '</p><pre>' + response.error + '</pre>');
                         }
                     },
-                    error: function() {
-                        $('#result').html('<p>An error occurred while running the script.</p>');
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        $('#result').html('<p>An error occurred while running the script.</p><p>Status: ' + textStatus + '</p><p>Error: ' + errorThrown + '</p>');
                     }
                 });
             });
         });
     </script>
 </body>
-</html>\n\n
+</html>
+\n\n
