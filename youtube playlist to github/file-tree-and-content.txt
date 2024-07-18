@@ -1,0 +1,270 @@
+File: /home/lamine/youtube-to-github-web/app.py
+Content:
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import script
+import os
+
+app = Flask(__name__, static_folder='static')
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        playlist_url = request.form['playlist_url']
+        github_username = request.form['github_username']
+        github_repo = request.form['github_repo']
+        github_token = request.form['github_token']
+        
+        result = script.run_script(playlist_url, github_username, github_repo, github_token)
+        return jsonify(result)
+    
+    return render_template('index.html')
+
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory('static', path)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)\n\n
+File: /home/lamine/youtube-to-github-web/static/css/styles.css
+Content:
+:root {
+  --bg-color: #ffffff;
+  --text-color: #000000;
+  --primary-color: #4CAF50;
+  --secondary-color: #3e8e41;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: all 0.3s ease;
+  line-height: 1.6;
+  padding: 20px;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+form {
+  display: grid;
+  gap: 20px;
+}
+
+label {
+  font-weight: bold;
+}
+
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
+}
+
+.button-3d {
+  padding: 10px 20px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 5px #999;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.button-3d:hover {
+  background-color: var(--secondary-color);
+}
+
+.button-3d:active {
+  background-color: var(--secondary-color);
+  box-shadow: 0 2px #666;
+  transform: translateY(4px);
+}
+
+#result {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#darkModeToggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px;
+  background-color: #333;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dark-mode {
+  --bg-color: #1a1a1a;
+  --text-color: #ffffff;
+}
+\n\n
+File: /home/lamine/youtube-to-github-web/static/js/main.js
+Content:
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('playlistForm');
+    const result = document.getElementById('result');
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    const flashingTitle = document.getElementById('flashingTitle');
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            result.innerHTML = data.message;
+        })
+        .catch(error => {
+            result.innerHTML = 'An error occurred: ' + error;
+        });
+    });
+
+    darkModeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+    });
+
+    // Flashing title effect
+    setInterval(() => {
+        flashingTitle.style.opacity = flashingTitle.style.opacity === '1' ? '0.5' : '1';
+    }, 500);
+});
+\n\n
+File: /home/lamine/youtube-to-github-web/script.py
+Content:
+import os
+import re
+import logging
+from github import Github
+from github import GithubException
+from pytube import Playlist, exceptions
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+def run_script(playlist_url, github_username, github_repo, github_token):
+    try:
+        playlist = Playlist(playlist_url)
+        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+
+        videos = []
+        for video in playlist.videos:
+            try:
+                videos.append((video.title, video.watch_url))
+            except Exception as e:
+                logging.error(f"Error processing video in playlist: {e}")
+
+        videos.sort(key=lambda x: x[0])
+
+        m3u_content = "#EXTM3U\n"
+        for title, url in videos:
+            m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
+
+        playlist_name = playlist.title 
+        file_name = f"{playlist_name}.m3u"
+        
+        g = Github(github_token)
+        repo = g.get_user(github_username).get_repo(github_repo) 
+        
+        try:
+            contents = repo.get_contents(file_name)
+            repo.update_file(contents.path, "Update playlist", m3u_content, contents.sha)
+            return {"status": "success", "message": f"Playlist '{playlist_name}' updated on GitHub."}
+        except GithubException as e:
+            if e.status == 404:
+                repo.create_file(file_name, "Add playlist", m3u_content)
+                return {"status": "success", "message": f"Playlist '{playlist_name}' created on GitHub."}
+            else:
+                return {"status": "error", "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
+
+    except exceptions.RegexMatchError:
+        return {"status": "error", "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
+    except KeyError:
+        return {"status": "error", "message": f"Error extracting video information from the playlist: {playlist_url}"}
+    except Exception as e:
+        return {"status": "error", "message": f"An unexpected error occurred: {str(e)}"}\n\n
+File: /home/lamine/youtube-to-github-web/Dockerfile
+Content:
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "app.py"]\n\n
+File: /home/lamine/youtube-to-github-web/project_contents.txt
+Content:
+File: /home/lamine/youtube-to-github-web/requirements.txt
+Content:
+Flask
+pytube
+PyGithub\n\n
+File: /home/lamine/youtube-to-github-web/templates/index.html
+Content:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube to GitHub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1 id="flashingTitle">YouTube Playlist to GitHub</h1>
+        <form id="playlistForm">
+            <div>
+                <label for="playlist_url">YouTube Playlist URL:</label>
+                <input type="text" id="playlist_url" name="playlist_url" required>
+            </div>
+            
+            <div>
+                <label for="github_username">GitHub Username:</label>
+                <input type="text" id="github_username" name="github_username" required>
+            </div>
+            
+            <div>
+                <label for="github_repo">GitHub Repository:</label>
+                <input type="text" id="github_repo" name="github_repo" required>
+            </div>
+            
+            <div>
+                <label for="github_token">GitHub Token:</label>
+                <input type="password" id="github_token" name="github_token" required>
+            </div>
+            
+            <button type="submit" class="button-3d">Submit</button>
+        </form>
+        <div id="result"></div>
+    </div>
+    <button id="darkModeToggle">Toggle Dark Mode</button>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>\n\n
