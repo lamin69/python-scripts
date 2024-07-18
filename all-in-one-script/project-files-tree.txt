@@ -44,50 +44,37 @@ from script_handler import run_youtube_to_github_handler, run_channel_scrapper_h
 
 app = Flask(__name__)
 
-current_progress = 0
-status_message = ""
-result_content = ""
-
-@app.route('/')
-def index():
-    return render_template('index.html')
+# ... (rest of the code)
 
 @app.route('/run_script', methods=['POST'])
 def run_script():
     global current_progress, status_message, result_content
     data = request.json
     script_type = data['script_type']
-    
+
     def progress_callback(progress, message):
         global current_progress, status_message
         current_progress = progress
         status_message = message
-    
+
     data['progress_callback'] = progress_callback
-    
-    if script_type == 'youtube-to-github':
-        result = run_youtube_to_github_handler(data)
-    elif script_type == 'channel-scrapper':
-        result = run_channel_scrapper_handler(data)
-        result_content = result.get('content', '')
-    else:
-        return jsonify({'error': 'Invalid script type'})
-    
-    result['content'] = result_content
-    return jsonify(result)
 
-@app.route('/upload_to_github', methods=['POST'])
-def upload_to_github():
-    data = request.json
-    return jsonify(upload_to_github_handler(data))
+    try:
+        if script_type == 'youtube-to-github':
+            result = run_youtube_to_github_handler(data)
+        elif script_type == 'channel-scrapper':
+            result = run_channel_scrapper_handler(data)
+            result_content = result.get('content', '')
+        else:
+            return jsonify({'error': 'Invalid script type'})
 
-@app.route('/progress')
-def progress():
-    global current_progress, status_message
-    return jsonify({'progress': current_progress, 'message': status_message})
+        result['content'] = result_content
+        return jsonify(result)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    except Exception as e:
+        return jsonify({'error': str(e)})  # Return the error message to the frontend
+
+# ... (rest of the code)
 \n\n
 File: /home/lamine/all-in-one-script/app/static/css/style.css
 Content:
@@ -139,163 +126,58 @@ progress {
 \n\n
 File: /home/lamine/all-in-one-script/app/static/js/script.js
 Content:
-function updateFields() {
-    var selector = document.getElementById("scriptSelector").value;
-    document.getElementById("youtubeToGithubFields").style.display = selector === "youtube-to-github" ? "block" : "none";
-    document.getElementById("channelScrapperFields").style.display = selector === "channel-scrapper" ? "block" : "none";
-}
+// ... (rest of the code)
 
-function runScript() {
-    var scriptType = document.getElementById("scriptSelector").value;
-    var data = {
-        script_type: scriptType
-    };
-
-    if (scriptType === "youtube-to-github") {
-        data.playlist_url = document.getElementById("playlistUrl").value;
-        data.github_username = document.getElementById("githubUsername").value;
-        data.github_repo = document.getElementById("githubRepo").value;
-        data.github_token = document.getElementById("githubToken").value;
-    } else if (scriptType === "channel-scrapper") {
-        data.website_urls = document.getElementById("websiteUrls").value;
-        data.github_username = document.getElementById("scrapperGithubUsername").value;
-        data.github_repo = document.getElementById("scrapperGithubRepo").value;
-        data.github_token = document.getElementById("scrapperGithubToken").value;
-    }
-
-    document.getElementById("progressBar").style.display = "block";
-    document.getElementById("resultArea").style.display = "none";
-
-    fetch('/run_script', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('Success:', data);
+fetch('/run_script', {
+    // ... (fetch options)
+})
+.then(response => response.json())
+.then(data => {
+    if (data.error) {
+        updateProgress(100, data.error); // Display error in the progress area
+    } else {
         updateProgress(data.progress, data.message);
-        if (data.content) {
-            document.getElementById("resultContent").textContent = data.content;
-            document.getElementById("resultArea").style.display = "block";
-        }
-    })
-    .catch((error) => {
-        console.error('Error:', error);
-    });
-}
-
-function updateProgress(progress, message) {
-    document.getElementById("progress").value = progress;
-    document.getElementById("statusMessage").innerText = message;
-}
-
-function downloadResult() {
-    var content = document.getElementById("resultContent").textContent;
-    var blob = new Blob([content], { type: 'text/plain' });
-    var url = window.URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'channels.m3u';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-}
-
-function uploadToGithub() {
-    var scriptType = document.getElementById("scriptSelector").value;
-    var data = {
-        script_type: scriptType + "_upload",
-        content: document.getElementById("resultContent").textContent,
-        github_username: document.getElementById(scriptType === "youtube-to-github" ? "githubUsername" : "scrapperGithubUsername").value,
-        github_repo: document.getElementById(scriptType === "youtube-to-github" ? "githubRepo" : "scrapperGithubRepo").value,
-        github_token: document.getElementById(scriptType === "youtube-to-github" ? "githubToken" : "scrapperGithubToken").value
-    };
-
-    fetch('/upload_to_github', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('Upload Success:', data);
-        alert(data.message);
-    })
-    .catch((error) => {
-        console.error('Upload Error:', error);
-        alert('Error uploading to GitHub');
-    });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    updateFields();
+        // ... (rest of the success handling)
+    }
+})
+.catch((error) => {
+    updateProgress(100, "An unexpected error occurred."); // Handle fetch errors
 });
+
+// ... (rest of the code)
 \n\n
 File: /home/lamine/all-in-one-script/app/youtube_to_github.py
 Content:
 import re
 import logging
-from github import Github
-from github import GithubException
+from github import Github, GithubException
 from pytube import Playlist, exceptions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def run_youtube_to_github_script(playlist_url, github_username, github_repo, github_token, progress_callback):
     try:
-        progress_callback(0, "Initializing...")
-        playlist = Playlist(playlist_url)
-        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+        # ... (playlist fetching and video processing logic)
 
-        progress_callback(10, "Fetching playlist videos...")
-        videos = []
-        for i, video in enumerate(playlist.videos):
-            try:
-                videos.append((video.title, video.watch_url))
-                progress = 10 + int((i + 1) / len(playlist.videos) * 40)
-                progress_callback(progress, f"Processed {i + 1}/{len(playlist.videos)} videos")
-            except Exception as e:
-                logging.error(f"Error processing video in playlist: {e}")
-
-        progress_callback(50, "Sorting videos...")
-        videos.sort(key=lambda x: x[0])
-
-        progress_callback(60, "Creating m3u content...")
-        m3u_content = "#EXTM3U\n"
-        for title, url in videos:
-            m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
-
-        playlist_name = playlist.title 
+        playlist_name = playlist.title
         file_name = f"{playlist_name}.m3u"
-        
-        progress_callback(70, "Connecting to GitHub...")
-        g = Github(github_token)
-        repo = g.get_user(github_username).get_repo(github_repo) 
-        
+
+        # ... (GitHub connection and file handling)
+
         try:
-            progress_callback(80, "Checking if file exists on GitHub...")
-            contents = repo.get_contents(file_name)
-            progress_callback(90, "Updating existing file on GitHub...")
-            repo.update_file(contents.path, f"Update playlist: {playlist_name}", m3u_content, contents.sha)
-            return {"progress": 100, "message": f"Playlist '{playlist_name}' updated on GitHub."}
-        except GithubException as e:
-            if e.status == 404:
-                progress_callback(90, "Creating new file on GitHub...")
-                repo.create_file(file_name, f"Add playlist: {playlist_name}", m3u_content)
-                return {"progress": 100, "message": f"Playlist '{playlist_name}' created on GitHub."}
-            else:
-                return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
+            # ... (check if file exists and update/create logic)
+        except GithubException as e:  # Corrected indentation
+            logging.error(f"GitHub Error: {e}")
+            return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
 
     except exceptions.RegexMatchError:
+        logging.error(f"Invalid playlist URL: {playlist_url}")
         return {"progress": 100, "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
     except KeyError:
+        logging.error(f"Error extracting video information: {playlist_url}")
         return {"progress": 100, "message": f"Error extracting video information from the playlist: {playlist_url}"}
     except Exception as e:
+        logging.error(f"Unexpected error: {e}")
         return {"progress": 100, "message": f"An unexpected error occurred: {str(e)}"}
 \n\n
 File: /home/lamine/all-in-one-script/app/channel_scrapper.py
