@@ -1,359 +1,368 @@
-File: /home/lamine/all-in-one-script/Dockerfile
-Content:
-FROM python:3.8-slim-buster
-
-WORKDIR /app
-
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-
-COPY app /app
-
-CMD ["python", "app.py"]
-\n\n
-File: /home/lamine/all-in-one-script/project_contents.txt
-Content:
-File: /home/lamine/all-in-one-script/docker-compose.yml
-Content:
-version: '3'
-services:
-  web:
-    build: .
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./app:/app
-    environment:
-      - FLASK_ENV=development
-\n\n
-File: /home/lamine/all-in-one-script/requirements.txt
-Content:
-Flask==2.0.1
-Werkzeug==2.0.1
-requests==2.26.0
-beautifulsoup4==4.10.0
-pytube==11.0.1
-PyGithub==1.55
-httpx==0.23.0
-
-\n\n
-File: /home/lamine/all-in-one-script/app/app.py
+File: /home/lamine/all-in-one-script/app.py
 Content:
 from flask import Flask, render_template, request, jsonify
-from script_handler import run_youtube_to_github_handler, run_channel_scrapper_handler, upload_to_github_handler
+import subprocess
+import os
 
 app = Flask(__name__)
 
-# ... (rest of the code)
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/run_script', methods=['POST'])
 def run_script():
-    global current_progress, status_message, result_content
-    data = request.json
-    script_type = data['script_type']
-
-    def progress_callback(progress, message):
-        global current_progress, status_message
-        current_progress = progress
-        status_message = message
-
-    data['progress_callback'] = progress_callback
-
-    try:
-        if script_type == 'youtube-to-github':
-            result = run_youtube_to_github_handler(data)
-        elif script_type == 'channel-scrapper':
-            result = run_channel_scrapper_handler(data)
-            result_content = result.get('content', '')
+    script_choice = request.form['script_choice']
+    
+    if script_choice == 'youtube-to-github':
+        playlist_url = request.form['playlist_url']
+        github_username = request.form['github_username']
+        github_repo = request.form['github_repo']
+        github_token = request.form['github_token']
+        
+        script_path = os.path.join(os.path.dirname(__file__), 'youtube-to-GitHub.py')
+        result = subprocess.run(['python', script_path, playlist_url, github_username, github_repo, github_token], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return jsonify({'success': True, 'message': 'Script executed successfully', 'output': result.stdout})
         else:
-            return jsonify({'error': 'Invalid script type'})
+            return jsonify({'success': False, 'message': 'Script execution failed', 'error': result.stderr})
+    
+    elif script_choice == 'channel-scraper':
+        websites = request.form['websites']
+        github_username = request.form['github_username']
+        github_repo = request.form['github_repo']
+        github_token = request.form['github_token']
+        
+        script_path = os.path.join(os.path.dirname(__file__), 'channel_scraper.py')
+        result = subprocess.run(['python', script_path, websites, github_username, github_repo, github_token], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            return jsonify({'success': True, 'message': 'Script executed successfully', 'output': result.stdout})
+        else:
+            return jsonify({'success': False, 'message': 'Script execution failed', 'error': result.stderr})
+    
+    else:
+        return jsonify({'success': False, 'message': 'Invalid script choice'})
 
-        result['content'] = result_content
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({'error': str(e)})  # Return the error message to the frontend
-
-# ... (rest of the code)
-\n\n
-File: /home/lamine/all-in-one-script/app/static/css/style.css
+if __name__ == '__main__':
+    app.run(debug=True)\n\n
+File: /home/lamine/all-in-one-script/static/css/styles.css
 Content:
+:root {
+  --bg-color: #ffffff;
+  --text-color: #000000;
+  --primary-color: #4CAF50;
+  --secondary-color: #3e8e41;
+}
+
 body {
-    font-family: Arial, sans-serif;
-    line-height: 1.6;
-    margin: 0;
-    padding: 20px;
-    background-color: #f4f4f4;
+  font-family: 'Arial', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: all 0.3s ease;
+  line-height: 1.6;
+  padding: 20px;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 h1 {
-    color: #333;
+  text-align: center;
+  margin-bottom: 30px;
 }
 
-input[type="text"], input[type="password"], select, textarea {
-    width: 100%;
-    padding: 8px;
-    margin-bottom: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+form {
+  display: grid;
+  gap: 20px;
 }
 
-button {
-    background-color: #4CAF50;
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+label {
+  font-weight: bold;
 }
 
-button:hover {
-    background-color: #45a049;
+input[type="text"],
+input[type="password"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
 }
 
-#progressBar {
-    margin-top: 20px;
+.button-3d {
+  padding: 10px 20px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  box-shadow: 0 5px #999;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-size: 16px;
 }
 
-progress {
-    width: 100%;
+.button-3d:hover {
+  background-color: var(--secondary-color);
 }
 
-#statusMessage {
-    margin-top: 10px;
-    font-style: italic;
+.button-3d:active {
+  background-color: var(--secondary-color);
+  box-shadow: 0 2px #666;
+  transform: translateY(4px);
+}
+
+#result {
+  margin-top: 20px;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#darkModeToggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px;
+  background-color: #333;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.dark-mode {
+  --bg-color: #1a1a1a;
+  --text-color: #ffffff;
 }
 \n\n
-File: /home/lamine/all-in-one-script/app/static/js/script.js
+File: /home/lamine/all-in-one-script/static/js/main.js
 Content:
-// ... (rest of the code)
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('playlistForm');
+    const result = document.getElementById('result');
+    const darkModeToggle = document.getElementById('darkModeToggle');
+    const flashingTitle = document.getElementById('flashingTitle');
 
-fetch('/run_script', {
-    // ... (fetch options)
-})
-.then(response => response.json())
-.then(data => {
-    if (data.error) {
-        updateProgress(100, data.error); // Display error in the progress area
-    } else {
-        updateProgress(data.progress, data.message);
-        // ... (rest of the success handling)
-    }
-})
-.catch((error) => {
-    updateProgress(100, "An unexpected error occurred."); // Handle fetch errors
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch('/', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            result.innerHTML = data.message;
+        })
+        .catch(error => {
+            result.innerHTML = 'An error occurred: ' + error;
+        });
+    });
+
+    darkModeToggle.addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+    });
+
+    // Flashing title effect
+    setInterval(() => {
+        flashingTitle.style.opacity = flashingTitle.style.opacity === '1' ? '0.5' : '1';
+    }, 500);
 });
-
-// ... (rest of the code)
 \n\n
-File: /home/lamine/all-in-one-script/app/youtube_to_github.py
+File: /home/lamine/all-in-one-script/script.py
 Content:
+import os
 import re
 import logging
-from github import Github, GithubException
+from github import Github
+from github import GithubException
 from pytube import Playlist, exceptions
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def run_youtube_to_github_script(playlist_url, github_username, github_repo, github_token, progress_callback):
+def run_script(playlist_url, github_username, github_repo, github_token):
     try:
-        # ... (playlist fetching and video processing logic)
+        playlist = Playlist(playlist_url)
+        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
 
-        playlist_name = playlist.title
+        videos = []
+        for video in playlist.videos:
+            try:
+                videos.append((video.title, video.watch_url))
+            except Exception as e:
+                logging.error(f"Error processing video in playlist: {e}")
+
+        videos.sort(key=lambda x: x[0])
+
+        m3u_content = "#EXTM3U\n"
+        for title, url in videos:
+            m3u_content += f"#EXTINF:-1,{title}\n{url}\n"
+
+        playlist_name = playlist.title 
         file_name = f"{playlist_name}.m3u"
-
-        # ... (GitHub connection and file handling)
-
+        
+        g = Github(github_token)
+        repo = g.get_user(github_username).get_repo(github_repo) 
+        
         try:
-            # ... (check if file exists and update/create logic)
+            contents = repo.get_contents(file_name)
+            repo.update_file(contents.path, "Update playlist", m3u_content, contents.sha)
+            return {"status": "success", "message": f"Playlist '{playlist_name}' updated on GitHub."}
         except GithubException as e:
-            logging.error(f"GitHub Error: {e}")  # Corrected indentation
-            return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
+            if e.status == 404:
+                repo.create_file(file_name, "Add playlist", m3u_content)
+                return {"status": "success", "message": f"Playlist '{playlist_name}' created on GitHub."}
+            else:
+                return {"status": "error", "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
 
     except exceptions.RegexMatchError:
-        logging.error(f"Invalid playlist URL: {playlist_url}")
-        return {"progress": 100, "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
+        return {"status": "error", "message": f"Invalid playlist URL: {playlist_url}. Please check the format."}
     except KeyError:
-        logging.error(f"Error extracting video information: {playlist_url}")
-        return {"progress": 100, "message": f"Error extracting video information from the playlist: {playlist_url}"}
+        return {"status": "error", "message": f"Error extracting video information from the playlist: {playlist_url}"}
     except Exception as e:
-        logging.error(f"Unexpected error: {e}")
-        return {"progress": 100, "message": f"An unexpected error occurred: {str(e)}"}
-\n\n
-File: /home/lamine/all-in-one-script/app/channel_scrapper.py
+        return {"status": "error", "message": f"An unexpected error occurred: {str(e)}"}\n\n
+File: /home/lamine/all-in-one-script/Dockerfile
 Content:
-import asyncio
-import httpx
-import re
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "app.py"]\n\n
+File: /home/lamine/all-in-one-script/channel_scraper.py
+Content:
+import sys
+import requests
 from bs4 import BeautifulSoup
+import re
+import github
 
-async def fetch_content(url):
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            return response.text
-        except Exception as e:
-            print(f"Error fetching {url}: {str(e)}")
-            return ""
-
-async def verify_stream(url):
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.head(url, timeout=5.0)
-            return response.status_code == 200
-        except:
-            return False
-
-def extract_channel_name(info):
-    name = re.search(r'tvg-name="([^"]*)"', info)
-    if name and name.group(1):
-        return name.group(1)
-    name = re.search(r'group-title="([^"]*)"', info)
-    if name and name.group(1):
-        return name.group(1)
-    name = re.search(r',(.+)$', info)
-    if name and name.group(1):
-        return name.group(1).strip()
-    return "Unknown Channel"
-
-async def process_m3u(content):
-    matches = re.findall(r'(#EXTINF:-1[^\n]*)\n(https?://[^\s]+\.m3u8)', content)
-    all_streams = {url: (extract_channel_name(info), info) for info, url in matches}
-    return all_streams
-
-async def process_html(content):
-    soup = BeautifulSoup(content, 'html.parser')
-    all_streams = {}
-    for a in soup.find_all('a', href=True):
-        if a['href'].endswith('.m3u8'):
-            all_streams[a['href']] = (a.text.strip() or "Unknown Channel", f"#EXTINF:-1,{a.text.strip()}")
-    return all_streams
-
-async def process_playlist(url, progress_callback):
-    content = await fetch_content(url)
-    all_streams = await process_m3u(content) or await process_html(content)
+def scrape_channels(websites):
+    channels = []
+    for website in websites:
+        response = requests.get(website)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Look for .m3u, .m3u8, or .ts files
+        links = soup.find_all('a', href=re.compile(r'\.(m3u|m3u8|ts)$'))
+        
+        for link in links:
+            channels.append(link['href'])
     
-    verified_streams = []
-    total = len(all_streams)
-    
-    for i, (url, (name, info)) in enumerate(all_streams.items()):
-        if await verify_stream(url):
-            verified_streams.append((name, url, info))
-        progress = int((i + 1) / total * 100)
-        progress_callback(progress, f"Processed {i + 1}/{total} streams from {url}")
-    
-    return verified_streams
+    return channels
 
-async def run_channel_scrapper_script_async(website_urls, progress_callback):
-    all_verified_streams = []
-    total_urls = len(website_urls)
+def upload_to_github(channels, github_username, github_repo, github_token):
+    g = github.Github(github_token)
+    repo = g.get_user(github_username).get_repo(github_repo)
     
-    for i, url in enumerate(website_urls):
-        verified_streams = await process_playlist(url, progress_callback)
-        all_verified_streams.extend(verified_streams)
-        progress = int((i + 1) / total_urls * 100)
-        progress_callback(progress, f"Processed {i + 1}/{total_urls} websites")
+    content = "\n".join(channels)
     
-    m3u_content = "#EXTM3U\n"
-    for name, url, info in all_verified_streams:
-        m3u_content += f"{info}\n{url}\n"
-    
-    return {'progress': 100, 'message': f'Channels successfully scraped with {len(all_verified_streams)} verified streams', 'content': m3u_content}
+    try:
+        contents = repo.get_contents("channels.m3u")
+        repo.update_file(contents.path, "Update channels list", content, contents.sha)
+    except github.GithubException:
+        repo.create_file("channels.m3u", "Create channels list", content)
 
-def run_channel_scrapper_script(website_urls, progress_callback):
-    return asyncio.run(run_channel_scrapper_script_async(website_urls, progress_callback))
+if __name__ == "__main__":
+    websites = sys.argv[1].split(',')
+    github_username = sys.argv[2]
+    github_repo = sys.argv[3]
+    github_token = sys.argv[4]
+    
+    channels = scrape_channels(websites)
+    upload_to_github(channels, github_username, github_repo, github_token)
+    
+    print(f"Successfully scraped and uploaded {len(channels)} channels.")
 \n\n
-File: /home/lamine/all-in-one-script/app/templates/index.html
+File: /home/lamine/all-in-one-script/project_contents.txt
+Content:
+File: /home/lamine/all-in-one-script/requirements.txt
+Content:
+Flask==2.0.1
+requests==2.26.0
+beautifulsoup4==4.10.0
+PyGithub==1.55\n\n
+File: /home/lamine/all-in-one-script/templates/index.html
 Content:
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All-in-One Script Interface</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Script Runner</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <h1>All-in-One Script Interface</h1>
-    
-    <select id="scriptSelector" onchange="updateFields()">
-        <option value="youtube-to-github">YouTube to GitHub</option>
-        <option value="channel-scrapper">Channel Scrapper M3U</option>
-    </select>
-
-    <div id="youtubeToGithubFields">
-        <input type="text" id="playlistUrl" placeholder="YouTube Playlist URL">
-        <input type="text" id="githubUsername" placeholder="GitHub Username">
-        <input type="text" id="githubRepo" placeholder="GitHub Repository">
-        <input type="password" id="githubToken" placeholder="GitHub Token">
-    </div>
-
-    <div id="channelScrapperFields" style="display:none;">
-        <textarea id="websiteUrls" placeholder="Enter website URLs (one per line)"></textarea>
-        <input type="text" id="scrapperGithubUsername" placeholder="GitHub Username">
-        <input type="text" id="scrapperGithubRepo" placeholder="GitHub Repository">
-        <input type="password" id="scrapperGithubToken" placeholder="GitHub Token">
-    </div>
-
-    <button onclick="runScript()">Run Script</button>
-
-    <div id="progressBar" style="display:none;">
-        <progress id="progress" value="0" max="100"></progress>
-        <p id="statusMessage"></p>
-    </div>
-
-    <div id="resultArea" style="display:none;">
-        <h2>Result</h2>
-        <pre id="resultContent"></pre>
-        <button onclick="downloadResult()">Download M3U File</button>
-        <button onclick="uploadToGithub()">Upload to GitHub</button>
-    </div>
-
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-</body>
-</html>
-\n\n
-File: /home/lamine/all-in-one-script/app/script_handler.py
-Content:
-from youtube_to_github import run_youtube_to_github_script
-from channel_scrapper import run_channel_scrapper_script
-from github import Github
-from github import GithubException
-
-def run_youtube_to_github_handler(params):
-    return run_youtube_to_github_script(
-        params['playlist_url'],
-        params['github_username'],
-        params['github_repo'],
-        params['github_token'],
-        params['progress_callback']
-    )
-
-def run_channel_scrapper_handler(params):
-    return run_channel_scrapper_script(
-        params['website_urls'].split('\n'),
-        params['progress_callback']
-    )
-
-def upload_to_github_handler(params):
-    try:
-        g = Github(params['github_token'])
-        repo = g.get_user(params['github_username']).get_repo(params['github_repo'])
-        file_name = 'channels.m3u' if params['script_type'] == 'channel-scrapper_upload' else 'playlist.m3u'
+    <h1>Script Runner</h1>
+    <form id="scriptForm">
+        <label for="script_choice">Choose a script:</label>
+        <select id="script_choice" name="script_choice">
+            <option value="youtube-to-github">YouTube to GitHub</option>
+            <option value="channel-scraper">Channel Scraper</option>
+        </select>
+        <br><br>
         
-        try:
-            contents = repo.get_contents(file_name)
-            repo.update_file(contents.path, "Update M3U file", params['content'], contents.sha)
-            return {"status": "success", "message": f"File '{file_name}' updated on GitHub."}
-        except GithubException as e:
-            if e.status == 404:
-                repo.create_file(file_name, "Add M3U file", params['content'])
-                return {"status": "success", "message": f"File '{file_name}' created on GitHub."}
-            else:
-                return {"status": "error", "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
-    except Exception as e:
-        return {"status": "error", "message": f"An unexpected error occurred: {str(e)}"}
-\n\n
-File: /home/lamine/all-in-one-script/app/__init__.py
-Content:
-\n\n
+        <div id="youtube-to-github-fields">
+            <input type="text" id="playlist_url" name="playlist_url" placeholder="YouTube Playlist URL" required>
+            <input type="text" id="github_username" name="github_username" placeholder="GitHub Username" required>
+            <input type="text" id="github_repo" name="github_repo" placeholder="GitHub Repository" required>
+            <input type="password" id="github_token" name="github_token" placeholder="GitHub Token" required>
+        </div>
+        
+        <div id="channel-scraper-fields" style="display: none;">
+            <textarea id="websites" name="websites" placeholder="Websites to scrape (one per line)" required></textarea>
+            <input type="text" id="github_username" name="github_username" placeholder="GitHub Username" required>
+            <input type="text" id="github_repo" name="github_repo" placeholder="GitHub Repository" required>
+            <input type="password" id="github_token" name="github_token" placeholder="GitHub Token" required>
+        </div>
+        
+        <button type="submit">Run Script</button>
+    </form>
+    <div id="result"></div>
+
+    <script>
+        $(document).ready(function() {
+            $('#script_choice').change(function() {
+                if ($(this).val() === 'youtube-to-github') {
+                    $('#youtube-to-github-fields').show();
+                    $('#channel-scraper-fields').hide();
+                } else if ($(this).val() === 'channel-scraper') {
+                    $('#youtube-to-github-fields').hide();
+                    $('#channel-scraper-fields').show();
+                }
+            });
+
+            $('#scriptForm').submit(function(e) {
+                e.preventDefault();
+                $.ajax({
+                    url: '/run_script',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        if (response.success) {
+                            $('#result').html('<p>Success: ' + response.message + '</p><pre>' + response.output + '</pre>');
+                        } else {
+                            $('#result').html('<p>Error: ' + response.message + '</p><pre>' + response.error + '</pre>');
+                        }
+                    },
+                    error: function() {
+                        $('#result').html('<p>An error occurred while running the script.</p>');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>\n\n
