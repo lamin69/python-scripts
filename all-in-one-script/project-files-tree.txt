@@ -166,8 +166,8 @@ def run_youtube_to_github_script(playlist_url, github_username, github_repo, git
 
         try:
             # ... (check if file exists and update/create logic)
-        except GithubException as e:  # Corrected indentation
-            logging.error(f"GitHub Error: {e}")
+        except GithubException as e:
+            logging.error(f"GitHub Error: {e}")  # Corrected indentation
             return {"progress": 100, "message": f"An error occurred while updating/creating the file on GitHub: {str(e)}"}
 
     except exceptions.RegexMatchError:
